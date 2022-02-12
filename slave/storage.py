@@ -1,20 +1,35 @@
-from schema import Schema
+import json
+
 from typing import Optional
-from functools import reduce
+import os
 
 
 class Storage:
-    def __init__(self, node_id: str, capacity: int):
+    def __init__(self, node_id: str, capacity: int = None, clear: bool = False):
         self.node_id = node_id
-        self.capacity = capacity
-        self.schema = dict()
 
-        self.format(b'\00')
+        if (not os.path.exists(self.filename)) or clear:
+            if capacity is None:
+                raise TypeError('Storage expects a value for capacity if node_id is not found')
 
-    def dump_chunk(self, tag, data: bytes, **metadata: dict) -> Optional[Schema]:
-        if tag in self.schema:
-            return
-            # todo: raise an exception
+            self.capacity = capacity
+
+            self.format(b'\00')
+
+            self.metadata = dict()
+            self.dump_schema()
+
+        else:
+            data = self.load_schema()
+
+            self.capacity: int = data['capacity']
+
+            self.__metadata: dict = data['metadata']
+
+    def dump_chunk(self, tag, data: bytes, **metadata: dict) -> Optional[dict]:
+        # store bytes in blob storage, and save its meta data
+        if tag in self.metadata:
+            raise FileExistsError(1, 'Tag allocated', 'Block with tag exists')
 
         free_frag = self._free_space(len(data))
 
@@ -24,27 +39,37 @@ class Storage:
 
         self.write(free_frag[0], data)
 
-        self.schema[tag] = Schema(tag=tag, pos=free_frag, **metadata)
+        self.metadata[tag] = dict(tag=tag, pos=free_frag, **metadata)
+        self.dump_schema()
 
-        return self.schema[tag]
+        return self.metadata[tag]
 
-    def load_chunk(self, tag):
-        if tag not in self.schema:
+    def load_chunk(self, tag) -> Optional[bytes]:
+        # load bytes from blob storage
+        if tag not in self.metadata:
             return
 
-        offset, span = self.schema[tag].pos
+        offset, span = self.metadata[tag].pos
 
         with open(self.filename, 'rb') as f:
             f.seek(offset)
-            data = reduce(lambda x, y: x+y, [f.read(1) for _ in range(span)])
+            data = b''
+            while byte := f.read(1048576):  # stream 1mb/loop
+                data += byte
 
         return data
 
     def free_chunk(self, tag):
-        # we delete the metadata from schema, so it's block in storage is recognised as free space
-        return self.schema.pop(tag)
+        # we delete the metadata from metadata, so it's block in storage is recognised as free space
+        if tag not in self.metadata:
+            return None
+        schema = self.metadata.pop(tag)
+
+        self.dump_schema()
+        return schema
 
     def expand(self, new_capacity):
+        # Expand capacity of blob storage
         if new_capacity <= self.capacity:
             return
 
@@ -55,8 +80,12 @@ class Storage:
 
     def format(self, byte: bytes):
         with open(self.filename, 'wb') as f:
-            print("I'm running and i don't know why")
-            f.write(byte * self.capacity)
+            print("Formatting new storage blob")
+            chunk_size = 2097152  # 2 megabytes
+            for _ in range(self.capacity // chunk_size):
+                f.write(byte * chunk_size)
+
+            f.write(byte * (self.capacity % chunk_size))  # write spill
         return
 
     def write(self, offset: int, data: bytes):
@@ -65,14 +94,15 @@ class Storage:
             f.write(data)
 
     def _free_space(self, size: int):
-        n_chunks = len(self.schema)
+        # find free space in storage
+        n_chunks = len(self.metadata)
 
         if not n_chunks:
             # if chunk is empty, just put it as the first chunk
             return (0, size) if size <= self.capacity else None
 
-        values = sorted(list(self.schema.values()), key=lambda x: x.pos[0])
-        values += [Schema(tag='end', pos=(self.capacity, 0))]
+        values = sorted(list(self.metadata.values()), key=lambda x: x.pos[0])
+        values += [dict(tag='end', pos=(self.capacity, 0))]
 
         # look for fragments between chunks
         for i in range(n_chunks):
@@ -84,6 +114,26 @@ class Storage:
 
         return None
 
+    def load_schema(self):
+        # load metadata from disk
+        with open(f'storage/{self.node_id}.schema.net-machine', 'r') as f:
+            return json.load(f)
+
+    def dump_schema(self) -> None:
+        # write metadata to disk
+        with open(f'storage/{self.node_id}.schema.net-machine', 'w') as f:
+            print(self.metadata)
+            return json.dump({"capacity": self.capacity, "metadata": self.metadata}, f)
+
+    def set_metadata(self, schema):
+        # property for setting metadata
+        self.__metadata = schema
+
+    def get_metadata(self):
+        return self.__metadata
+
+    metadata = property(get_metadata, set_metadata)
+
     @property
     def filename(self):
-        return f'{self.node_id}.storage.net-machine'
+        return f'storage/{self.node_id}.blob.net-machine'

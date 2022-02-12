@@ -2,4 +2,6 @@ venv
 code-archive
 .git
 .idea
+storage
+*.net-machine
 .env

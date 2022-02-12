@@ -49,7 +49,7 @@ class Client:
         # create new file in master node
         metadata = {'mime': self.mime.from_file(fn), 'owner': self.client_id, **metadata}
 
-        response = requests.post(f'{self.master_url}/new-file', data=metadata)
+        response = requests.post(f'{self.master_url}/files', data=metadata)
 
         return response.json()
 
@@ -86,7 +86,7 @@ class Client:
             f.seek(partition[0])
             files = {"raw": io.BytesIO(f.read(partition[1]))}
 
-        response = requests.post(f"{node_urls[0]}/upload-chunk", data=data, files=files)
+        response = requests.post(f"{node_urls[0]}/chunks", data=data, files=files)
 
         return response.json()
 
@@ -95,7 +95,7 @@ class Client:
         # download chunk from source
         for node in chunk['nodes']:
             try:
-                with requests.get(f"{node}/pull-chunk?tag={chunk['tag']}") as r:
+                with requests.get(f"{node}/chunks?tag={chunk['tag']}") as r:
                     r.raise_for_status()
                     for inner_chunk in r.iter_content(chunk_size=8192):
                         write_partition(fn, chunk['offset'], inner_chunk)

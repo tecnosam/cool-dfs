@@ -1,6 +1,6 @@
 import concurrent.futures
 from typing import Dict
-from task import Task
+from .task import Task
 import time
 
 

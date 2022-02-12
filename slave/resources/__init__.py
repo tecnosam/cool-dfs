@@ -1,6 +1,6 @@
 from .. import net_api
 
-from chunk import Chunk
+from .chunk import ChunkResource
 
 
-net_api.add_resource(Chunk, '/chunks')
+net_api.add_resource(ChunkResource, '/chunks')
