@@ -1,6 +1,5 @@
 from task_executor import TaskManager
 from storage import Storage
-from net_interface import NetInterface
 
 
 class Node:
@@ -8,4 +7,3 @@ class Node:
         self.master_node = master
         self.storage = Storage(node_id, 1024)
         self.task_manager = TaskManager(self)
-        self.net_interface = NetInterface(self, port)

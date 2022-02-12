@@ -1,4 +1,5 @@
 from schema import Schema
+from typing import Optional
 from functools import reduce
 
 
@@ -10,7 +11,7 @@ class Storage:
 
         self.format(b'\00')
 
-    def dump_chunk(self, tag, data: bytes):
+    def dump_chunk(self, tag, data: bytes, **metadata: dict) -> Optional[Schema]:
         if tag in self.schema:
             return
             # todo: raise an exception
@@ -20,18 +21,16 @@ class Storage:
         if free_frag is None:
             print("No free space")
             return
-            # todo: raise an exception
 
         self.write(free_frag[0], data)
 
-        self.schema[tag] = Schema(tag=tag, pos=free_frag)
+        self.schema[tag] = Schema(tag=tag, pos=free_frag, **metadata)
 
         return self.schema[tag]
 
     def load_chunk(self, tag):
         if tag not in self.schema:
             return
-            # todo: raise exception
 
         offset, span = self.schema[tag].pos
 

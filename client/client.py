@@ -4,6 +4,7 @@ import magic
 import concurrent.futures
 from typing import List, Tuple
 from utils import partition_file, file_size, generate_file, write_partition
+import io
 
 
 class Client:
@@ -79,28 +80,30 @@ class Client:
     @staticmethod
     def upload_chunk(fn: str, tag: str, partition: Tuple[int, int], node_urls: List[str]):
         # upload chunk to node
-        headers = {
-            'tag': tag, 'offset': partition[0],
-            'nodes': node_urls, 'Content-Type': 'application/octet-stream'
-        }
+        data = {'tag': tag, 'offset': partition[0], 'nodes': node_urls}
 
         with open(fn, 'rb') as f:
             f.seek(partition[0])
-            data = f.read(partition[1])
+            files = {"raw": io.BytesIO(f.read(partition[1]))}
 
-        response = requests.post(f"{node_urls[0]}/upload-chunk", headers=headers, data=data)
+        response = requests.post(f"{node_urls[0]}/upload-chunk", data=data, files=files)
 
         return response.json()
 
     @staticmethod
     def download_chunk(fn: str, chunk: dict):
-
+        # download chunk from source
         for node in chunk['nodes']:
             try:
                 with requests.get(f"{node}/pull-chunk?tag={chunk['tag']}") as r:
                     r.raise_for_status()
                     for inner_chunk in r.iter_content(chunk_size=8192):
                         write_partition(fn, chunk['offset'], inner_chunk)
-                    break
+                    return True  # since transfer was successful, we don't need the replicates
             except requests.exceptions.ConnectionError:
-                continue
+                continue  # transfer was not successful, so we move to the next replicate
+            except requests.exceptions.RequestException:
+                continue  # transfer was not successful, so we move on to the next replicate
+
+        # it'll only get here if all replicates are unreachable
+        return False
