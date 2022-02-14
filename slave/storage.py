@@ -26,18 +26,20 @@ class Storage:
 
             self.__metadata: dict = data['metadata']
 
-    def dump_chunk(self, tag, data: bytes, **metadata: dict) -> Optional[dict]:
+    def dump_chunk(self, tag, i_stream, data_size: int, **metadata: dict) -> Optional[dict]:
         # store bytes in blob storage, and save its meta data
         if tag in self.metadata:
             raise FileExistsError(1, 'Tag allocated', 'Block with tag exists')
 
-        free_frag = self._free_space(len(data))
+        data_size = int(data_size)
+
+        free_frag = self._free_space(data_size)
 
         if free_frag is None:
             print("No free space")
             return
 
-        self.write(free_frag[0], data)
+        self.write(free_frag[0], i_stream)
 
         self.metadata[tag] = dict(tag=tag, pos=free_frag, **metadata)
         self.dump_schema()
@@ -49,13 +51,21 @@ class Storage:
         if tag not in self.metadata:
             return
 
-        offset, span = self.metadata[tag].pos
+        offset, span = self.metadata[tag]['pos']
+
+        stream_chunk_size = 2048
 
         with open(self.filename, 'rb') as f:
             f.seek(offset)
-            data = b''
-            while byte := f.read(1048576):  # stream 1mb/loop
-                data += byte
+
+            if span < stream_chunk_size:
+                data = b''
+                for _ in range(span//stream_chunk_size):
+                    data += f.read(stream_chunk_size)
+
+                data += f.read(span % stream_chunk_size)
+            else:
+                data = f.read(span)
 
         return data
 
@@ -79,6 +89,7 @@ class Storage:
         return self.capacity
 
     def format(self, byte: bytes):
+        # clear all bytes in raw file and assign them to param 'byte'
         with open(self.filename, 'wb') as f:
             print("Formatting new storage blob")
             chunk_size = 2097152  # 2 megabytes
@@ -88,10 +99,14 @@ class Storage:
             f.write(byte * (self.capacity % chunk_size))  # write spill
         return
 
-    def write(self, offset: int, data: bytes):
+    def write(self, offset: int, data):
         with open(self.filename, 'rb+') as f:
             f.seek(offset, 0)
-            f.write(data)
+            if isinstance(data, bytes):
+                f.write(data)
+            else:
+                while byte := data.read(2048):
+                    f.write(byte)
 
     def _free_space(self, size: int):
         # find free space in storage
@@ -101,14 +116,14 @@ class Storage:
             # if chunk is empty, just put it as the first chunk
             return (0, size) if size <= self.capacity else None
 
-        values = sorted(list(self.metadata.values()), key=lambda x: x.pos[0])
+        values = sorted(list(self.metadata.values()), key=lambda x: x['pos'][0])
         values += [dict(tag='end', pos=(self.capacity, 0))]
 
         # look for fragments between chunks
         for i in range(n_chunks):
-            offset = sum(values[i].pos)  # start+span - 1 of current chunk
+            offset = sum(values[i]['pos'])  # start+span - 1 of current chunk
 
-            space = values[i+1].pos[0] - offset  # start of next chunk - end of current chunk
+            space = values[i+1]['pos'][0] - offset  # start of next chunk - end of current chunk
             if size <= space:
                 return offset, size
 

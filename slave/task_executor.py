@@ -29,6 +29,5 @@ class TaskManager:
         return None
 
     def task_callback(self, result):
-        # todo: ideally, should communicate desired output to master node
         # will need to communicate with node.net_interface
         pass

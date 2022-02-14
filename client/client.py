@@ -80,7 +80,7 @@ class Client:
     @staticmethod
     def upload_chunk(fn: str, tag: str, partition: Tuple[int, int], node_urls: List[str]):
         # upload chunk to node
-        data = {'tag': tag, 'offset': partition[0], 'nodes': node_urls}
+        data = {'tag': tag, 'offset': partition[0], 'data_size': partition[1], 'nodes': node_urls}
 
         with open(fn, 'rb') as f:
             f.seek(partition[0])

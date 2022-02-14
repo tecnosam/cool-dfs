@@ -12,6 +12,6 @@ class Task:
 
     def run_task(self):
         self.status = 'RUNNING'
-        self.data = self.query  # todo: execute query and store output in data
+        self.data = self.query
         self.status = 'COMPLETE'
         return self.data

@@ -36,21 +36,26 @@ class ChunkResource(Resource):
         return node.storage.metadata
 
     def post(self):
-        node = net_interface.config['node']
-        raw = request.files.get('raw')
+        try:
+            node = net_interface.config['node']
+            raw = request.files.get('raw')
 
-        if raw is None:
-            abort(Response("You need to parse the raw data as a file", 400))
+            if raw is None:
+                abort(Response("You need to parse the raw data as a file", 400))
 
-        if 'tag' not in request.form:
-            abort(Response("You need to parse a tag field in the form body", 400))
+            if 'tag' not in request.form:
+                abort(Response("You need to parse a tag field in the form body", 400))
+            if 'data_size' not in request.form:
+                abort(Response("You need to parse the length of data in bytes in form body", 400))
 
-        schema = node.storage.dump_chunk(data=raw.stream, **dict(request.form))
+            schema = node.storage.dump_chunk(i_stream=raw.stream, **dict(request.form))
 
-        if schema is None:
-            abort(Response("No space", 400))
+            if schema is None:
+                abort(Response("No space", 400))
 
-        return schema
+            return schema
+        except FileExistsError as e:
+            abort(Response(str(e), 400))
 
     def delete(self):
         node = net_interface.config['node']

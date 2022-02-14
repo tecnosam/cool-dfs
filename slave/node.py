@@ -3,10 +3,10 @@ from .storage import Storage
 
 
 class Node:
-    def __init__(self, master: tuple):
+    def __init__(self, master: tuple, storage_size=1024):
         self.master_node = master
         self.node_id = self.connect(master)
-        self.storage = Storage(self.node_id, 1024)
+        self.storage = Storage(self.node_id, storage_size)
         self.task_manager = TaskManager(self)
 
     @staticmethod
