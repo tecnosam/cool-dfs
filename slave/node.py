@@ -1,16 +1,20 @@
 from .task_executor import TaskManager
 from .storage import Storage
+from .config import port, protocol
+from requests import post
 
 
 class Node:
-    def __init__(self, master: tuple, storage_size=1024):
+    def __init__(self, master: str):
         self.master_node = master
-        self.node_id = self.connect(master)
-        self.storage = Storage(self.node_id, storage_size)
+        self.info = self.connect(master)
+        self.storage = Storage(self.info['id'])
         self.task_manager = TaskManager(self)
 
     @staticmethod
-    def connect(master: tuple):
-        # todo connect to master and get ID
+    def connect(master: str):
         print(master)
-        return "1"
+        response = post(f"{master}/nodes", data={'protocol': protocol, 'port': port})
+        response.raise_for_status()
+
+        return response.json()

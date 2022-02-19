@@ -3,5 +3,8 @@ code-archive
 .git
 .idea
 storage
+__pycache__
+test-files
 *.net-machine
 .env
+*.db

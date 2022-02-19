@@ -2,8 +2,8 @@ import requests
 import json
 import magic
 import concurrent.futures
-from typing import List, Tuple
-from utils import partition_file, file_size, generate_file, write_partition
+from typing import Tuple
+from .utils import partition_file, generate_file, write_partition
 import io
 
 
@@ -11,94 +11,120 @@ class Client:
     def __init__(self, master: str):
         self.master_url = master
         self.mime = magic.Magic(mime=True)
-        self.client_id = None  # todo this should be set when connected to master
+        self.client_id = 1  # todo this should be set when connected to master
 
     def connect(self):
         self.client_id = 1
 
-    def download_file(self, tag):
+    def download_file(self, file_id):
         # request file information from master node
-        file = self.fetch_file_info(tag)
+        file = self.fetch_file_info(file_id)
 
-        generate_file(tag, file.get('size'))  # create a file with NULL-BYTES
+        size = sum([part['span'] for part in file['partitions']])
 
-        chunks = file.get('chunks', [])
+        generate_file(file['name'], size)  # create a file with NULL-BYTES
+
+        partitions = file.get('partitions', [])
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = [executor.submit(self.download_chunk, tag, chunk) for chunk in chunks]
+            result = [self.download_partition(file['name'], part) for part in partitions]
+            # result = [executor.submit(self.download_partition, file['name'], part) for part in partitions]
 
-        return concurrent.futures.as_completed(result)
+        # return concurrent.futures.as_completed(result)
+        return result
 
-    def fetch_file_info(self, tag):
+    def fetch_file_info(self, file_id):
         # fetch file meta data
-        return requests.get(f"{self.master_url}/files?tag={tag}").json()
+        return requests.get(f"{self.master_url}/files/{file_id}").json()
 
-    def upload_file(self, fn: str, tag: str):
+    def upload_file(self, fn: str, name: str):
         # Upload a file to Distributed File System
 
-        file = self.create_new_file(fn, tag=tag, size=file_size(fn))
+        file = self.create_new_file(fn, name=name)
 
-        partitions = partition_file(fn)  # partition file into chunks
+        partitions = partition_file(fn)  # partition_fields file into chunks
+        print(partitions)
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            results = [executor.submit(self.process_partition, fn, part, file) for part in partitions]
+            results = [self.process_partition(fn, part, file) for part in partitions]
 
-        return concurrent.futures.as_completed(results)
+        # return concurrent.futures.as_completed(results)
+        return results
 
     def create_new_file(self, fn, **metadata):
         # create new file in master node
-        metadata = {'mime': self.mime.from_file(fn), 'owner': self.client_id, **metadata}
+        metadata = {'mime': self.mime.from_file(fn), 'client_id': self.client_id, **metadata}
+        print(metadata)
 
         response = requests.post(f'{self.master_url}/files', data=metadata)
+        response.raise_for_status()
 
         return response.json()
 
-    def process_partition(self, fn: str, partition: Tuple[int, int], file: dict, n_replicas: int = 3):
-        # fetch available nodes and send partition to that node
-        node_urls = self.get_available_nodes(partition, n_replicas)
+    def process_partition(self, fn: str, partition: Tuple[int, int], file: dict, n_replicas: int = 1):
+        # fetch available nodes and send partition_fields to that node
+        print('init')
+        nodes = self.__get_available_nodes(partition, n_replicas)
 
-        partition_schema = self.upload_chunk(fn, file['tag'], partition, node_urls)
+        partition = self.__upload_partition(file['id'], partition)
 
-        return self.send_partition_info(file['id'], partition_schema)
+        # upload replicas to nodes
+        replicas = self.__upload_replica(partition, nodes)
 
-    def get_available_nodes(self, partition: Tuple[int, int], n_replicas: int) -> list:
-        # get list of available nodes that can store partition
-        data = {"size": partition[1], 'n_replicas': n_replicas}
+        self.__upload_replica_data(fn, partition, replicas)
 
-        response = requests.post(f"{self.master_url}/available-nodes", data=data)
+        return partition
+
+    def __upload_partition(self, file_id: int, partition: Tuple[int, int]):
+        # upload chunk to node
+        data = {'file_id': file_id, 'offset': partition[0], 'span': partition[1]}
+
+        response = requests.post(f"{self.master_url}/partitions", data=data)
+        print(response.text)
+        response.raise_for_status()
 
         return response.json()
 
-    def send_partition_info(self, file_id, partition_schema: dict):
-        # send chunk/partition info to master to store
-        data = json.dumps(partition_schema)
+    def __upload_replica(self, partition, nodes):
+        replicas = []
+        for i in range(len(nodes)):
+            node = nodes[i]
+            data = {'node_id': node['id'], 'partition_id': partition['id']}
+            response = requests.post(f"{self.master_url}/replicas", data=data)
 
-        response = requests.post(f"{self.master_url}/files/{file_id}", json=data)
+            if response.status_code == 200:
+                replicas.append(response.json())
 
-        return response.json()
+        return replicas
 
     @staticmethod
-    def upload_chunk(fn: str, tag: str, partition: Tuple[int, int], node_urls: List[str]):
-        # upload chunk to node
-        data = {'tag': tag, 'offset': partition[0], 'data_size': partition[1], 'nodes': node_urls}
+    def __upload_replica_data(fn, partition, replicas: list):
+        offset, span = partition['offset'], partition['span']
 
         with open(fn, 'rb') as f:
-            f.seek(partition[0])
-            files = {"raw": io.BytesIO(f.read(partition[1]))}
+            f.seek(offset)
 
-        response = requests.post(f"{node_urls[0]}/chunks", data=data, files=files)
+            files = {"raw": io.BytesIO(f.read(span))}
+
+        replica = replicas.pop(0)
+        node = replica['node']
+        data = json.dumps(replicas)
+
+        response = requests.post(f"{node['url']}/partitions/{replica['id']}", files=files, json=data)
 
         return response.json()
 
     @staticmethod
-    def download_chunk(fn: str, chunk: dict):
+    def download_partition(fn: str, partition: dict):
         # download chunk from source
-        for node in chunk['nodes']:
+        for replica in partition['replicas']:
+            print(replica)
             try:
-                with requests.get(f"{node}/chunks?tag={chunk['tag']}") as r:
+                url = f"{replica['node']['url']}/partitions/{replica['id']}"  # url for node_url to access file
+                with requests.get(url) as r:
                     r.raise_for_status()
                     for inner_chunk in r.iter_content(chunk_size=8192):
-                        write_partition(fn, chunk['offset'], inner_chunk)
+                        write_partition(fn, partition['offset'], inner_chunk)
                     return True  # since transfer was successful, we don't need the replicates
             except requests.exceptions.ConnectionError:
                 continue  # transfer was not successful, so we move to the next replicate
@@ -107,3 +133,11 @@ class Client:
 
         # it'll only get here if all replicates are unreachable
         return False
+
+    def __get_available_nodes(self, partition: Tuple[int, int], n_replicas: int) -> list:
+        # get list of available nodes that can store partition_fields
+        data = {"size": partition[1], 'n_replicas': n_replicas}
+
+        response = requests.post(f"{self.master_url}/available-nodes", data=data)
+
+        return response.json()
