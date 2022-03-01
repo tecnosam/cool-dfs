@@ -1,4 +1,5 @@
 import os
+import io
 
 
 def file_size(fn: str):
@@ -26,14 +27,27 @@ def partition_file(fn: str, chunk_size: int = 134217728):
 
 
 def generate_file(fn, size):
+    chunk_size = 100*1024  # 100kb
     with open(fn, 'wb') as f:
-        f.write(bytes(size))
+        for _ in range(size//chunk_size):
+            f.write(bytes(chunk_size))
+        f.write(bytes(size%chunk_size))
 
     return
 
 
 def write_partition(fn: str, offset, data):
-    with open(fn, 'rb+') as f:
+    mode = 'rb+' if os.path.exists(fn) else 'wb'
+    with open(fn, mode) as f:
         f.seek(offset)
-        f.write(data)
+        if isinstance(data, bytes):
+            f.write(data)
+        elif isinstance(data, io.BufferedReader):
+            while byte:=data.read(8192):
+                f.write(byte)
+        else:
+            # it is a stream or iterator
+            for byte in data:
+                f.write(byte)
+
     return

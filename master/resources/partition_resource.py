@@ -25,6 +25,7 @@ class PartitionResource(Resource):
             _partition = Partition.query.get(partition_id)
             if _partition is None:
                 raise NoSuchInstance('partition does not exist')
+            return _partition
         return Partition.query.all()
 
     @marshal_with(partition_fields)

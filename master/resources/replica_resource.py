@@ -48,5 +48,4 @@ class ReplicaResource(Resource):
     @exception_decorator(resource_name='replica')
     def delete(self, replica_id: int = None):
         _replica = Replica.delete(replica_id)
-
         return {'id': _replica.id}

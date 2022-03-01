@@ -16,9 +16,6 @@ class PartitionResource(Resource):
         # offset = int(request.args.get('offset'))
         # span = int(request.args.get('span'))
 
-        # if offset is None or span is None:
-        #     abort(Response("U need to parse both offset and span", 400))
-
         data: bytes = node.storage.read_file(f"replica-{replica_id}")
 
         stream = io.BytesIO(data)

@@ -1,6 +1,7 @@
-from flask_restful import Resource, marshal_with, reqparse, request
+from flask_restful import Resource, marshal_with, reqparse
+from flask import request
 from .all_fields import file_fields
-from .utils import exception_decorator
+from .utils import exception_decorator, delete_partition_data
 
 from master.models.file_model import File
 from master.exceptions import NoSuchInstance
@@ -44,10 +45,13 @@ class FileResource(Resource):
     @exception_decorator(resource_name='file')
     def put(self, file_id: int = None):
         pl = self.e_parser.parse_args(strict=True)
+        print(pl)
 
         return File.edit(file_id, **pl)
 
     @exception_decorator(resource_name='file')
     def delete(self, file_id: int = None):
         _file = File.delete(file_id)
-        return {'id': _file.id,'name': _file.name}
+        for partition in _file.partitions:
+            delete_partition_data(partition)
+        return {'id': _file.id, 'name': _file.name}

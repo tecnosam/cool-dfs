@@ -14,6 +14,7 @@ replica_fields = {
         'id': fields.Integer,
         'url': fields.String
     }),
+    'date_created': fields.DateTime,
     "node_id": fields.Integer,
 }
 
@@ -25,12 +26,14 @@ partition_fields = {
     }),
     'offset': fields.Integer,
     'span': fields.Integer,
+    'date_created': fields.DateTime,
     'replicas': fields.Nested(replica_fields),
 }
 
 file_fields = {
     'id': fields.Integer,
     'name': fields.String,
+    'mime': fields.String,
     'folder': fields.Nested({
         'id': fields.Integer,
         'name': fields.String
@@ -39,6 +42,7 @@ file_fields = {
         'id': fields.Integer,
         'ip_address': fields.String
     }),
+    'date_created': fields.DateTime,
     'partitions': fields.Nested(partition_fields)
 }
 
@@ -58,6 +62,7 @@ folder_fields = {
         'id': fields.Integer,
         'name': fields.String
     }),
+    'date_created': fields.DateTime,
     'files': fields.Nested(file_fields)
 }
 

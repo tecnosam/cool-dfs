@@ -12,7 +12,7 @@ class GenericModel:
 
         kwargs = {
             arg: cls.preprocessors[arg](kwargs[arg])
-            for arg in kwargs if arg in cls.preprocessors
+            for arg in kwargs if arg in cls.preprocessors and kwargs[arg] is not None
         }
         instance = cls(**kwargs)
         return push_instance(instance)
@@ -28,7 +28,8 @@ class GenericModel:
     @classmethod
     def delete(cls, prim_key):
         instance = cls.query.get(prim_key)
-        return delete_instance(instance)
+        if instance is not None:
+            return instance.pop()
 
     def pop(self):
         return delete_instance(self)

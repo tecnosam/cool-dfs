@@ -1,8 +1,16 @@
 import sqlalchemy.exc
 
+from requests import delete
+
 from ... import db
 
 from master.exceptions import *
+
+
+def delete_replica_data(replica, node):
+    # todo test this
+    url = f"{node.url}/partitions/{replica.id}"
+    delete(url)
 
 
 def push_instance(instance):
@@ -26,12 +34,14 @@ def edit_instance(instance, kwargs: dict, preprocessors: dict):
             if key in preprocessors:
                 processor = preprocessors[key]
                 val = kwargs[key]
+                if val is None:
+                    continue
                 setattr(instance, key, processor(val))
 
         db.session.commit()
         return instance
 
-    except sqlalchemy.exc.IntegrityError:
+    except sqlalchemy.exc.IntegrityError as e:
         raise DuplicateKeyException()
     except NoSuchInstance as e:
         raise e
@@ -50,8 +60,8 @@ def delete_instance(instance):
 
         return instance
 
-    except sqlalchemy.exc.IntegrityError:
-        raise DuplicateKeyException()
+    except sqlalchemy.exc.IntegrityError as e:
+        raise e
 
     except NoSuchInstance as e:
         raise e

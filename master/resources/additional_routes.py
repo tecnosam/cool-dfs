@@ -5,7 +5,9 @@ from flask import jsonify
 from flask_restful import reqparse, marshal
 
 from master.models.node_model import Node
-from .all_fields import node_fields
+from master.models.file_model import File
+from master.models.folder_model import Folder
+from .all_fields import node_fields, file_fields, folder_fields
 
 
 @app.route('/available-nodes', methods=['POST'])
@@ -18,3 +20,11 @@ def available_nodes():
     nodes = marshal(Node.get_available_nodes(**pl), node_fields)
 
     return jsonify(nodes)
+
+
+@app.route("/root")
+def tree():
+    files = File.query.filter_by(folder_id=None).all()
+    folders = Folder.query.filter_by(parent_id=None).all()
+
+    return jsonify({'files': marshal(files, file_fields), 'sub_folders': marshal(folders, folder_fields)})
