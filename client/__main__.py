@@ -10,6 +10,8 @@ import sys
 
 from . import app
 from .client import Client
+from .config import port
+from threading import Thread
 
 if not sys.argv[1:]:
     net_url = input("Input network's URL")
@@ -18,4 +20,7 @@ else:
 
 app.config['client'] = Client(net_url)
 
-app.run(port=4000, debug=True)
+def run_server():
+    app.run(port=port, debug=False)
+
+run_server()

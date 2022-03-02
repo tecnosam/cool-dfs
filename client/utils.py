@@ -1,4 +1,5 @@
 import os
+from .config import partition_size
 
 
 def file_size(fn: str):
@@ -6,7 +7,7 @@ def file_size(fn: str):
     return os.path.getsize(fn)
 
 
-def partition_file(fn: str, chunk_size: int = 134217728):
+def partition_file(fn: str, chunk_size: int = partition_size):
     size = file_size(fn)
     n_parts = (size // chunk_size)
     spill = size % chunk_size
