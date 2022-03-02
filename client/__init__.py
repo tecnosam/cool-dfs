@@ -3,5 +3,4 @@ from .client import Client
 
 app = Flask(__name__)
 
-
 from .resources import api

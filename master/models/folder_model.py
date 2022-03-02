@@ -1,5 +1,6 @@
 from master import db
 from master.models.extras.generic_class import GenericModel
+from master.models.extras.utils import delete_instance
 from datetime import datetime
 
 
@@ -20,3 +21,9 @@ class Folder(db.Model, GenericModel):
         'parent_id': lambda x: x,
         'client_id': lambda x: x,
     }
+
+    def pop(self):
+        for _file in self.files:
+            _file.pop()
+
+        return delete_instance(self)

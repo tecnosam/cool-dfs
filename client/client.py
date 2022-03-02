@@ -3,54 +3,46 @@ import json
 import magic
 import concurrent.futures
 from typing import Tuple
-from .utils import partition_file, write_partition
+from .utils import partition_file
+from .net_reader import NetReader
 import io
-import os
 
 
 class Client:
     def __init__(self, master: str):
         self.master_url = master
         self.mime = magic.Magic(mime=True)
-        self.client_id = 1  # todo this should be set when connected to master
+        self.client_id = self.connect(master)
 
-    def connect(self):
-        self.client_id = 1
+    @staticmethod
+    def connect(master_url):
+        response = requests.post(f"{master_url}/clients")
+        response.raise_for_status()
+
+        response = response.json()
+        return response['id']
 
     def download_file(self, file_id):
         # request file information from master node
         file = self.fetch_file_info(file_id)
 
-        partitions = file.get('partitions', [])
+        partitions = file.json().get('partitions', [])
+        partitions = sorted(partitions, key=lambda x: x['offset'])
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # result = [self.download_partition(file['name'], part) for part in partitions]
-            name = file['name']
-            print(partitions)
-            result = [executor.submit(self.__download_partition, name, part) for part in partitions]
+            result = executor.map(self.__download_partition, partitions)
             # result = [self.__download_partition(name, part) for part in partitions]
 
-        if all(concurrent.futures.as_completed(result)):
-        # if all(result):
-            partitions = sorted(partitions, key = lambda x: x['offset'])
-
-            for partition in partitions:
-
-                part_name = f"{file['name']}-{partition['id']}"
-
-                write_partition(file['name'], partition['offset'], open(part_name, 'rb'))
-
-                os.remove(part_name)
-
-            return open(file['name'], 'rb')
+        return NetReader(result)
         # return result
 
     def fetch_file_info(self, file_id: int = None):
         # fetch file meta data
         if file_id is not None:
-            return requests.get(f"{self.master_url}/files/{file_id}").json()
+            return requests.get(f"{self.master_url}/files/{file_id}?client_id={self.client_id}")
 
-        return requests.get(f"{self.master_url}/files").json()
+        return requests.get(f"{self.master_url}/files")
 
     def upload_file(self, fn: str, name: str, folder_id: int = None):
         # Upload a file to Distributed File System
@@ -60,53 +52,49 @@ class Client:
         partitions = partition_file(fn)  # partition_fields file into chunks
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            # [self.__process_partition(fn, part, file) for part in partitions]
             result = [executor.submit(self.__process_partition, fn, part, file) for part in partitions]
 
         if all(concurrent.futures.as_completed(result)):
             return file
 
     def edit_file(self, file_id: int, **kwargs):
-        file = requests.put(f"{self.master_url}/files/{file_id}", data=kwargs)
+        file = requests.put(f"{self.master_url}/files/{file_id}?client_id={self.client_id}", data=kwargs)
         file.raise_for_status()
 
-        return file.json()
+        return file
 
     def delete_file(self, file_id: int):
-        file = requests.delete(f"{self.master_url}/files/{file_id}")
+        file = requests.delete(f"{self.master_url}/files/{file_id}?client_id={self.client_id}")
         file.raise_for_status()
-        return file.json()
+        return file
 
     def create_folder(self, name, parent_id: int = None):
         data = {'name': name, 'client_id': self.client_id, 'parent_id': parent_id}
-        folder = requests.post(f"{self.master_url}/folders", data=data)
+        folder = requests.post(f"{self.master_url}/folders?client_id={self.client_id}", data=data)
         folder.raise_for_status()
 
-        return folder.json()
+        return folder
 
     def fetch_directory(self, folder_id: int = None):
         if folder_id is None:
-            return requests.get(f"{self.master_url}/folders").json()
-        return requests.get(f"{self.master_url}/folders/{folder_id}").json()
+            return requests.get(f"{self.master_url}/folders?client_id={self.client_id}")
+        return requests.get(f"{self.master_url}/folders/{folder_id}?client_id={self.client_id}")
 
     def edit_folder(self, folder_id: int, **kwargs):
-        folder = requests.put(f"{self.master_url}/folders/{folder_id}", data=kwargs)
-        folder.raise_for_status()
+        folder = requests.put(f"{self.master_url}/folders/{folder_id}?client_id={self.client_id}", data=kwargs)
 
-        return folder.json()
+        return folder
 
     def delete_folder(self, folder_id: int = None):
-        folder = requests.delete(f"{self.master_url}/folders/{folder_id}")
-        folder.raise_for_status()
+        folder = requests.delete(f"{self.master_url}/folders/{folder_id}?client_id={self.client_id}")
 
-        return folder.json()
+        return folder
 
     def __create_new_file(self, fn, **metadata):
         # create new file in master node
         metadata = {'mime': self.mime.from_file(fn), 'client_id': self.client_id, **metadata}
 
         response = requests.post(f'{self.master_url}/files', data=metadata)
-        response.raise_for_status()
 
         return response.json()
 
@@ -152,10 +140,14 @@ class Client:
         with open(fn, 'rb') as f:
             f.seek(offset)
 
+            # stream = read_partition(fn, offset, span, 8192)
+            # stream = NetReader([stream])
             files = {"raw": io.BytesIO(f.read(span))}
 
         replica = replicas.pop(0)
+
         node = replica['node']
+
         data = json.dumps(replicas)
 
         response = requests.post(f"{node['url']}/partitions/{replica['id']}", files=files, json=data)
@@ -163,10 +155,9 @@ class Client:
         return response.json()
 
     @staticmethod
-    def __download_partition(fn: str, partition: dict):
+    def __download_partition(partition: dict):
         # download chunk from source
         print("Starting download")
-        part_id = partition['id']
         for replica in partition['replicas']:
             try:
 
@@ -174,14 +165,8 @@ class Client:
 
                 with requests.get(url) as r:
                     r.raise_for_status()
-                    # offset = 0
-                    # for inner_chunk in r.iter_content(chunk_size=8192):
-                        # write_partition(fn, partition['offset'], inner_chunk)
-                    write_partition(f"{fn}-{part_id}", 0, r.iter_content(chunk_size=8192))
-                    print("yessir")
-                    # offset += 8192
 
-                    return True  # since transfer was successful, we don't need the replicates
+                    return r.iter_content(chunk_size=8192)
 
             except requests.exceptions.ConnectionError:
                 print("con err")
@@ -192,7 +177,7 @@ class Client:
                 continue  # transfer was not successful, so we move on to the next replicate
 
         # it'll only get here if all replicates are unreachable
-        return False
+        return None
 
     def __get_available_nodes(self, partition: Tuple[int, int], n_replicas: int) -> list:
         # get list of available nodes that can store partition_fields

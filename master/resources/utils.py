@@ -1,4 +1,6 @@
 from flask import abort, Response
+from flask_restful import marshal
+from .all_fields import folder_fields
 from requests import delete
 from functools import wraps
 from ..exceptions import DuplicateKeyException, NoSuchInstance
@@ -10,14 +12,12 @@ def prep_err(resource, status, msg, code):
 
 
 def delete_replica_data(replica):
-    # todo test this
     _node = replica.node
     url = f"{_node.url}/partitions/{replica.id}"
     delete(url)
 
 
 def delete_partition_data(partition):
-    # todo test this
     for _replica in partition.replicas:
         delete_replica_data(_replica)
 

@@ -1,5 +1,4 @@
 import os
-import io
 
 
 def file_size(fn: str):
@@ -29,25 +28,41 @@ def partition_file(fn: str, chunk_size: int = 134217728):
 def generate_file(fn, size):
     chunk_size = 100*1024  # 100kb
     with open(fn, 'wb') as f:
-        for _ in range(size//chunk_size):
+        for _ in range(size // chunk_size):
             f.write(bytes(chunk_size))
-        f.write(bytes(size%chunk_size))
+        f.write(bytes(size % chunk_size))
 
     return
 
 
-def write_partition(fn: str, offset, data):
-    mode = 'rb+' if os.path.exists(fn) else 'wb'
-    with open(fn, mode) as f:
+def read_partition(fn: str, offset: int, span: int, chunk_size: int = 8192):
+    with open(fn, 'rb') as f:
         f.seek(offset)
-        if isinstance(data, bytes):
-            f.write(data)
-        elif isinstance(data, io.BufferedReader):
-            while byte:=data.read(8192):
-                f.write(byte)
-        else:
-            # it is a stream or iterator
-            for byte in data:
-                f.write(byte)
+        if span <= chunk_size:
+            yield f.read(span)
+            return
+        n_chunks = span // chunk_size
+        spill = span % chunk_size
+        print("ded", n_chunks, spill)
 
-    return
+        for _ in range(n_chunks):
+            print(_)
+            yield f.read(chunk_size)
+
+        yield f.read(spill)
+
+# def write_partition(fn: str, offset, data):
+#     mode = 'rb+' if os.path.exists(fn) else 'wb'
+#     with open(fn, mode) as f:
+#         f.seek(offset)
+#         if isinstance(data, bytes):
+#             f.write(data)
+#         elif isinstance(data, io.BufferedReader):
+#             while byte := data.read(8192):
+#                 f.write(byte)
+#         else:
+#             # it is a stream or iterator
+#             for byte in data:
+#                 f.write(byte)
+#
+#     return

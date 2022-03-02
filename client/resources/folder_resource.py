@@ -2,6 +2,7 @@ from flask_restful import Resource, reqparse
 
 from .. import app
 from ..client import Client
+from .utils import response
 
 
 class FolderResource(Resource):
@@ -14,6 +15,7 @@ class FolderResource(Resource):
     eparser.add_argument('name', type=str, required=False)
     eparser.add_argument('parent_id', type=int, required=False)
 
+    @response
     def get(self, folder_id: int = None):
         client: Client = app.config['client']
 
@@ -23,17 +25,20 @@ class FolderResource(Resource):
 
         return client.fetch_directory()
 
+    @response
     def post(self, **_):
         client: Client = app.config['client']
 
         return client.create_folder(**self.parser.parse_args(strict=True))
 
+    @response
     def put(self, folder_id: int):
         # edit file, moving it to somewhere else or changing name
         client: Client = app.config['client']
 
         return client.edit_folder(folder_id, **self.eparser.parse_args(strict=True))
 
+    @response
     def delete(self, folder_id: int):
         client: Client = app.config['client']
 

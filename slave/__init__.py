@@ -5,6 +5,7 @@ from .node import Node
 from .config import master
 
 import os
+import psutil
 
 if not os.path.exists('storage'):
     os.mkdir('storage')
@@ -19,4 +20,5 @@ import slave.resources
 
 @net_interface.route('/')
 def ping():
-    return "Ping successful"
+    st = os.statvfs('storage')
+    return str(st.f_bavail * st.f_frsize)

@@ -4,7 +4,8 @@ from .. import app
 from .file_resource import FileResource
 from .folder_resource import FolderResource
 
-api = Api(app)
+
+api = Api(app, '/api')
 
 api.add_resource(FileResource, '/files', '/files/<int:file_id>')
 api.add_resource(FolderResource, '/folders', '/folders/<int:folder_id>')

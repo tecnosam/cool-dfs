@@ -8,7 +8,6 @@ from master.exceptions import *
 
 
 def delete_replica_data(replica, node):
-    # todo test this
     url = f"{node.url}/partitions/{replica.id}"
     delete(url)
 

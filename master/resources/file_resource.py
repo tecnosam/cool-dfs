@@ -1,10 +1,13 @@
 from flask_restful import Resource, marshal_with, reqparse
-from flask import request
+from flask import request, abort, Response
 from .all_fields import file_fields
-from .utils import exception_decorator, delete_partition_data
+from .utils import exception_decorator
 
 from master.models.file_model import File
+from master.models.client_model import Client
 from master.exceptions import NoSuchInstance
+
+from .. import db
 
 
 class FileResource(Resource):
@@ -24,18 +27,24 @@ class FileResource(Resource):
     @marshal_with(file_fields)
     @exception_decorator(resource_name='file')
     def get(self, file_id: int = None):
+        ip = request.remote_addr
         if file_id is not None:
             _file = File.query.get(file_id)
             if _file is None:
                 raise NoSuchInstance('file does not exist')
+            if _file.client.ip_address != ip:
+                abort(Response("You don't have access to this file", 403))
             return _file
 
-        return File.query.all()
+        client = Client.query.filter_by(ip_address=ip).first()
+        if client is None:
+            abort(Response("You are not registered client on this network", 403))
+
+        return File.query.filter_by(client_id=client.id).all()
 
     @marshal_with(file_fields)
     @exception_decorator(resource_name='file')
     def post(self, **_):
-        print('de', request.form)
         pl = self.parser.parse_args(strict=True)
         print(pl)
 
@@ -51,7 +60,17 @@ class FileResource(Resource):
 
     @exception_decorator(resource_name='file')
     def delete(self, file_id: int = None):
-        _file = File.delete(file_id)
-        for partition in _file.partitions:
-            delete_partition_data(partition)
+        ip = request.remote_addr
+        client = Client.query.filter_by(ip_address=ip).first()
+
+        if client is None:
+            abort(Response("You are not registered client on this network", 403))
+
+        _file: File = File.query.filter_by(id=file_id, client_id=client.id).first()
+
+        if _file is None:
+            raise NoSuchInstance("file does not exist")
+
+        _file = _file.pop()
+
         return {'id': _file.id, 'name': _file.name}

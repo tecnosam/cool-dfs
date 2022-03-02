@@ -56,7 +56,7 @@ folder_fields = {
     }),
     'parent_folder': fields.Nested({
         'id': fields.Integer,
-        'name': fields.String
+        'name': fields.String,
     }),
     'sub_folders': fields.Nested({
         'id': fields.Integer,

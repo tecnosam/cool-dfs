@@ -1,5 +1,6 @@
 
 from .utils import push_instance, edit_instance, delete_instance
+from master.exceptions import *
 
 
 # noinspection PyArgumentList
@@ -30,6 +31,9 @@ class GenericModel:
         instance = cls.query.get(prim_key)
         if instance is not None:
             return instance.pop()
+
+        raise NoSuchInstance()
+
 
     def pop(self):
         return delete_instance(self)

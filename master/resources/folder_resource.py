@@ -17,28 +17,30 @@ class FolderResource(Resource):
     e_parser = reqparse.RequestParser()
     e_parser.add_argument('name', required=False, type=str)
     e_parser.add_argument('parent_id', required=False, type=int)
-    e_parser.add_argument('client_id', required=False, type=int)
+    # e_parser.add_argument('client_id', required=False, type=int)
 
     @exception_decorator(resource_name='folder')
     def get(self, folder_id=None):
+        client_id = request.args['client_id']
+
         if folder_id is not None:
 
-            _folder = Folder.query.get(folder_id)
+            _folder = Folder.query.filter_by(id=folder_id, client_id=client_id).first()
 
             if _folder is None:
                 raise NoSuchInstance("No such folder with ID %d" % folder_id)
 
             return marshal(_folder, folder_fields)
 
-        elif 'client_id' in request.args:
-            client_id = request.args['client_id']
+        elif 'full-root' in request.args:
+            files = File.query.filter_by(folder_id=None, client_id=client_id).all()
+            folders = Folder.query.filter_by(parent_id=None, client_id=client_id).all()
+
+            _folder = {'files': marshal(files, file_fields), 'sub_folders': marshal(folders, folder_fields)}
+
+        else:
             _folder = Folder.query.filter_by(client_id=client_id).all()
-            return marshal(_folder, folder_fields)
-
-        files = File.query.filter_by(folder_id=None).all()
-        folders = Folder.query.filter_by(parent_id=None).all()
-
-        _folder = {'files': marshal(files, file_fields), 'sub_folders': marshal(folders, folder_fields)}
+            _folder = marshal(_folder, folder_fields)
 
         return _folder
 
@@ -57,10 +59,11 @@ class FolderResource(Resource):
     @exception_decorator(resource_name='folder')
     def delete(self, folder_id=None):
 
-        _folder = Folder.delete(folder_id)
+        client_id = request.args['client_id']
+        _folder = Folder.query.filter_by(id=folder_id, client_id=client_id).first()
+        if _folder is None:
+            raise NoSuchInstance("Folder does not exist")
 
-        for file in _folder.files:
-            for partition in file.partitions:
-                delete_partition_data(partition)
+        _folder = _folder.pop()
 
         return {'id': _folder.id}
